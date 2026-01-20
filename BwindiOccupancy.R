@@ -11,10 +11,43 @@ matching_tifs <- c("GEDI_biomass_filled","Dist_Wat_25m_Uganda_250mDist","Precipi
                    "Bwindi_Slope_2mMaxarResample","RH98_classified_2023","FHD_classified_2023",
                    "PAI_classified_2023","Cover_classified_2023","Population_Dens_Bwindi",
                    "TMIN_WorldClim","TAVG_WorldClim","TMAX_WorldClim","Bwindi_tsri","Bwindi_tpi")
+
+# Load all rasters first
+rasterList <- lapply(matching_tifs, function(x) 
+  rast(paste0("/Users/abarenb1/Documents/PhD/Chapter3/Variables/", x, ".tif")))
+
+# Set the first raster as template (or choose a specific one)
+template <- rasterList[[1]]
+
+# Ensure birds vector data is in the same CRS as template
+if (crs(birds) != crs(template)) {
+  birds <- project(birds, crs(template))
+}
+
+# Align all rasters to template (same CRS, extent, resolution)
+rasterList_aligned <- lapply(1:length(rasterList), function(i) {
+  r <- rasterList[[i]]
   
+  # Check if geometry matches
+  if (!compareGeom(r, template, stopOnError = FALSE)) {
+    print(paste("Aligning", matching_tifs[i]))
+    
+    # Determine method based on data type
+    # Use "near" for classified layers, "bilinear" for continuous
+    method <- ifelse(grepl("classified", matching_tifs[i]), "near", "bilinear")
+    
+    # Project and resample to template
+    project(r, template, method = method)
+  } else {
+    r
+  }
+})
+
+# Now extract from aligned rasters
 for (j in 1:length(matching_tifs)){
-  print(matching_tifs[j])
-  ras <- rast(paste("/Users/abarenb1/Documents/PhD/Chapter3/Variables/",matching_tifs[j],".tif", sep=""))
+  print(paste("Extracting from:", matching_tifs[j]))
+  
+  ras <- rasterList_aligned[[j]]
   ras_ex <- terra::extract(ras, birds, method="simple", factors=F)
   ras_ex[is.na(ras_ex)] <- 0
   nm <- names(ras)
@@ -319,14 +352,14 @@ model {
   mu.beta.pop ~ dnorm(0, 0.1)
   tau.beta.pop ~ dgamma(0.1, 0.1)
   
-  mu.beta.tmin ~ dnorm(0, 0.1)
-  tau.beta.tmin ~ dgamma(0.1, 0.1)
-  
-  mu.beta.tavg ~ dnorm(0, 0.1)
-  tau.beta.tavg ~ dgamma(0.1, 0.1)
-  
-  mu.beta.tmax ~ dnorm(0, 0.1)
-  tau.beta.tmax ~ dgamma(0.1, 0.1)
+  #mu.beta.tmin ~ dnorm(0, 0.1)
+  #tau.beta.tmin ~ dgamma(0.1, 0.1)
+  #
+  #mu.beta.tavg ~ dnorm(0, 0.1)
+  #tau.beta.tavg ~ dgamma(0.1, 0.1)
+  #
+  #mu.beta.tmax ~ dnorm(0, 0.1)
+  #tau.beta.tmax ~ dgamma(0.1, 0.1)
   
   mu.beta.tsri ~ dnorm(0, 0.1)
   tau.beta.tsri ~ dgamma(0.1, 0.1)
@@ -349,9 +382,9 @@ model {
     beta.pai[i] ~ dnorm(mu.beta.pai, tau.beta.pai)
     beta.cover[i] ~ dnorm(mu.beta.cover, tau.beta.cover)
     beta.pop[i] ~ dnorm(mu.beta.pop, tau.beta.pop)
-    beta.tmin[i] ~ dnorm(mu.beta.tmin, tau.beta.tmin)
-    beta.tavg[i] ~ dnorm(mu.beta.tavg, tau.beta.tavg)
-    beta.tmax[i] ~ dnorm(mu.beta.tmax, tau.beta.tmax)
+    #beta.tmin[i] ~ dnorm(mu.beta.tmin, tau.beta.tmin)
+    #beta.tavg[i] ~ dnorm(mu.beta.tavg, tau.beta.tavg)
+    #beta.tmax[i] ~ dnorm(mu.beta.tmax, tau.beta.tmax)
     beta.tsri[i] ~ dnorm(mu.beta.tsri, tau.beta.tsri)
     
     # Ecological model (occupancy)
@@ -370,9 +403,9 @@ model {
                          beta.pai[i] * pai[j] +
                          beta.cover[i] * cover[j] +
                          beta.pop[i] * pop[j] +
-                         beta.tmin[i] * tmin[j] +
-                         beta.tavg[i] * tavg[j] +
-                         beta.tmax[i] * tmax[j] +
+                         #beta.tmin[i] * tmin[j] +
+                         #beta.tavg[i] * tavg[j] +
+                         #beta.tmax[i] * tmax[j] +
                          beta.tsri[i] * tsri[j]
       
       z[i,j] ~ dbern(psi[i,j])
@@ -425,9 +458,9 @@ inits <- function() {
     mu.beta.pai = rnorm(1, 0, 0.5),
     mu.beta.cover = rnorm(1, 0, 0.5),
     mu.beta.pop = rnorm(1, 0, 0.5),
-    mu.beta.tmin = rnorm(1, 0, 0.5),
-    mu.beta.tavg = rnorm(1, 0, 0.5),
-    mu.beta.tmax = rnorm(1, 0, 0.5),
+    #mu.beta.tmin = rnorm(1, 0, 0.5),
+    #mu.beta.tavg = rnorm(1, 0, 0.5),
+    #mu.beta.tmax = rnorm(1, 0, 0.5),
     mu.beta.tsri = rnorm(1, 0, 0.5),
     tau.beta.biomass = rgamma(1, 0.1, 0.1),
     tau.beta.wsci = rgamma(1, 0.1, 0.1),
@@ -440,9 +473,9 @@ inits <- function() {
     tau.beta.pai = rgamma(1, 0.1, 0.1),
     tau.beta.cover = rgamma(1, 0.1, 0.1),
     tau.beta.pop = rgamma(1, 0.1, 0.1),
-    tau.beta.tmin = rgamma(1, 0.1, 0.1),
-    tau.beta.tavg = rgamma(1, 0.1, 0.1),
-    tau.beta.tmax = rgamma(1, 0.1, 0.1),
+    #tau.beta.tmin = rgamma(1, 0.1, 0.1),
+    #tau.beta.tavg = rgamma(1, 0.1, 0.1),
+    #tau.beta.tmax = rgamma(1, 0.1, 0.1),
     tau.beta.tsri = rgamma(1, 0.1, 0.1)
   )
 }
@@ -458,13 +491,16 @@ params <- c(
   "mu.beta.biomass","mu.beta.wsci", "mu.beta.precip", "mu.beta.slope", 
   "mu.beta.dist_water", "mu.beta.height",
   "mu.beta.rh98", "mu.beta.fhd", "mu.beta.pai", "mu.beta.cover",
-  "mu.beta.pop", "mu.beta.tmin", "mu.beta.tavg", "mu.beta.tmax", "mu.beta.tsri",
+  "mu.beta.pop", 
+  #"mu.beta.tmin", "mu.beta.tavg", "mu.beta.tmax", 
+  "mu.beta.tsri",
   
   # Species-specific parameters
   "lpsi", "lp",
   "beta.biomass", "beta.wsci", "beta.precip", "beta.slope", "beta.dist_water", "beta.height",
   "beta.rh98", "beta.fhd", "beta.pai", "beta.cover", "beta.pop",
-  "beta.tmin", "beta.tavg", "beta.tmax", "beta.tsri",
+  #"beta.tmin", "beta.tavg", "beta.tmax", 
+  "beta.tsri",
   
   # Derived parameters
   "psi.fs", "mean.psi", "richness", "total.richness", "z"
@@ -506,7 +542,9 @@ jags_out$summary[c("mu.lpsi", "sigma.lpsi", "mu.lp", "sigma.lp",
                    "mu.beta.biomass","mu.beta.wsci", "mu.beta.precip", "mu.beta.slope",
                    "mu.beta.dist_water", "mu.beta.height",
                    "mu.beta.rh98", "mu.beta.fhd", "mu.beta.pai", "mu.beta.cover",
-                   "mu.beta.pop", "mu.beta.tmin", "mu.beta.tavg", "mu.beta.tmax", "mu.beta.tsri"), ]
+                   "mu.beta.pop", 
+                   #"mu.beta.tmin", "mu.beta.tavg", "mu.beta.tmax", 
+                   "mu.beta.tsri"), ]
 
 # Species-specific occupancy (ALL COVARIATES)
 species_results <- data.frame(
@@ -524,9 +562,9 @@ species_results <- data.frame(
   beta_pai = jags_out$mean$beta.pai,
   beta_cover = jags_out$mean$beta.cover,
   beta_pop = jags_out$mean$beta.pop,
-  beta_tmin = jags_out$mean$beta.tmin,
-  beta_tavg = jags_out$mean$beta.tavg,
-  beta_tmax = jags_out$mean$beta.tmax,
+  #beta_tmin = jags_out$mean$beta.tmin,
+  #beta_tavg = jags_out$mean$beta.tavg,
+  #beta_tmax = jags_out$mean$beta.tmax,
   beta_tsri = jags_out$mean$beta.tsri,
   prop_occupied = jags_out$mean$psi.fs
 )
@@ -542,7 +580,8 @@ library(ggplot2)
 covariate_effects <- data.frame(
   covariate = rep(c("Biomass","WSCI", "Precipitation", "Slope", "DistWater", "Height",
                     "RH98", "FHD", "PAI", "Cover", "Pop", 
-                    "Tmin", "Tavg", "Tmax", "TSRI"), 
+                    #"Tmin", "Tavg", "Tmax", 
+                    "TSRI"), 
                   each = length(jags_out$sims.list$mu.beta.biomass)),
   effect = c(jags_out$sims.list$mu.beta.biomass,
              jags_out$sims.list$mu.beta.wsci,
@@ -555,22 +594,24 @@ covariate_effects <- data.frame(
              jags_out$sims.list$mu.beta.pai,
              jags_out$sims.list$mu.beta.cover,
              jags_out$sims.list$mu.beta.pop,
-             jags_out$sims.list$mu.beta.tmin,
-             jags_out$sims.list$mu.beta.tavg,
-             jags_out$sims.list$mu.beta.tmax,
+             #jags_out$sims.list$mu.beta.tmin,
+             #jags_out$sims.list$mu.beta.tavg,
+             #jags_out$sims.list$mu.beta.tmax,
              jags_out$sims.list$mu.beta.tsri)
 )
 
 # Extract summary statistics for all covariate effects
 covariate_names <- c("Biomass","WSCI", "Precipitation", "Slope", "Dist_Water", "Height",
                      "RH98", "FHD", "PAI", "Cover", "Pop", 
-                     "Tmin", "Tavg", "Tmax", "TSRI")
+                     #"Tmin", "Tavg", "Tmax", 
+                     "TSRI")
 
 covariate_params <- c("mu.beta.biomass","mu.beta.wsci", "mu.beta.precip", "mu.beta.slope", 
                       "mu.beta.dist_water", "mu.beta.height",
                       "mu.beta.rh98", "mu.beta.fhd", "mu.beta.pai", 
                       "mu.beta.cover", "mu.beta.pop",
-                      "mu.beta.tmin", "mu.beta.tavg", "mu.beta.tmax", "mu.beta.tsri")
+                      #"mu.beta.tmin", "mu.beta.tavg", "mu.beta.tmax", 
+                      "mu.beta.tsri")
 
 coef_summary <- data.frame(
   covariate = covariate_names,
@@ -618,9 +659,9 @@ ggplot(forest_data, aes(y = reorder(covariate, mean))) +
     panel.grid.major.x = element_line(color = "gray90", linetype = "dotted")
   )
 
-ggsave("covariate_effects_forest_plot.png", width = 10, height = 6, dpi = 300)
+ggsave("covariate_effects_forest_plot_notemp.png", width = 10, height = 6, dpi = 300)
 
-saveRDS(jags_out, "multispecies_occupancy_results_full.rds")
+saveRDS(jags_out, "multispecies_occupancy_results_full_notemp.rds")
 write.csv(species_results, "species_occupancy_results_full.csv", row.names = FALSE)
 
 # Plot species richness across sites
@@ -640,22 +681,23 @@ ggplot(richness_summary, aes(x = site, y = mean_richness)) +
        x = "Site", y = "Species Richness")
 
 # Plot species-specific responses to biomass
-species_height <- data.frame(
+species_cover <- data.frame(
   species = species_list,
-  effect = jags_out$mean$beta.height,
-  lower = jags_out$q2.5$beta.height,
-  upper = jags_out$q97.5$beta.height
+  effect = jags_out$mean$beta.cover,
+  lower = jags_out$q2.5$beta.cover,
+  upper = jags_out$q97.5$beta.cover
 )
 
-ggplot(species_height, aes(x = reorder(species, effect), y = effect)) +
+ggplot(species_cover, aes(x = reorder(species, effect), y = effect)) +
   geom_point() +
   geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
   coord_flip() +
   theme_minimal() +
-  labs(x = "Species", y = "Effect of Maxar Height on Occupancy")+
+  labs(x = "Species", y = "Effect of Cover on Occupancy")+
   theme(text = element_text(size = 20))      
 
 # Save results
 saveRDS(jags_out, "multispecies_occupancy_results.rds")
 write.csv(species_results, "species_occupancy_results.csv", row.names = FALSE)
+

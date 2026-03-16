@@ -2,6 +2,8 @@
 ##############################################################################################
 library(terra)
 library(sf)
+library(loo)
+library(coda)
 
 #Extract Environmental Variables Intersecting with Bird Sightings
 birds<-st_read("/Users/abarenb1/Documents/PhD/Chapter3/Bwindi Endemic and threatened birds/Species_with_Coordinates_ESPG4326.shp")
@@ -177,6 +179,7 @@ for(i in 1:min(5, n_species)) {
               species_list[i], total_detections, sites_detected, n_sites))
 }
 
+write.csv(bird_data_clean, "/Users/abarenb1/Documents/PhD/Chapter3/bird_data_clean.csv", row.names = FALSE)
 # Extract site-level covariates (take first occurrence of each site)
 site_covs <- bird_data_clean %>%
   group_by(SiteKey.x) %>%
@@ -627,6 +630,46 @@ coef_summary <- coef_summary %>%
   arrange(mean) %>%
   mutate(covariate = factor(covariate, levels = covariate))
 
+#Get Variable Importance from Output
+
+
+# Define your covariate list
+covariate_list <- c("biomass", "dist_water","wsci", "precip", "height", "slope",
+                    "rh98", "fhd", "pai", "cover", "pop", "tsri")
+community_importance_simple <- data.frame(
+  covariate = covariate_list,
+  mean = NA,
+  sd = NA,
+  CI_lower = NA,
+  CI_upper = NA,
+  Rhat = NA,
+  n_eff = NA
+)
+
+for(i in 1:length(covariate_list)) {
+  param_name <- paste0("mu.beta.", covariate_list[i])
+  
+  if(param_name %in% rownames(jags_out$summary)) {
+    community_importance_simple$mean[i] <- jags_out$summary[param_name, "mean"]
+    community_importance_simple$sd[i] <- jags_out$summary[param_name, "sd"]
+    community_importance_simple$CI_lower[i] <- jags_out$summary[param_name, "2.5%"]
+    community_importance_simple$CI_upper[i] <- jags_out$summary[param_name, "97.5%"]
+    community_importance_simple$Rhat[i] <- jags_out$summary[param_name, "Rhat"]
+    community_importance_simple$n_eff[i] <- jags_out$summary[param_name, "n.eff"]
+  }
+}
+
+# Calculate importance metrics
+community_importance_simple <- community_importance_simple %>%
+  mutate(
+    abs_mean = abs(mean),
+    z_score = mean / sd,
+    significant = (CI_lower > 0 & CI_upper > 0) | (CI_lower < 0 & CI_upper < 0)
+  ) %>%
+  arrange(desc(abs(z_score)))
+
+print(community_importance_simple)
+
 #Community effect
 
 library(forestplot)
@@ -661,8 +704,8 @@ ggplot(forest_data, aes(y = reorder(covariate, mean))) +
 
 ggsave("covariate_effects_forest_plot_notemp.png", width = 10, height = 6, dpi = 300)
 
-saveRDS(jags_out, "multispecies_occupancy_results_full_notemp.rds")
-write.csv(species_results, "species_occupancy_results_full.csv", row.names = FALSE)
+saveRDS(jags_out, "/Users/abarenb1/Documents/PhD/Chapter3/multispecies_occupancy_results_full_notemp.rds")
+write.csv(species_results, "/Users/abarenb1/Documents/PhD/Chapter3/species_occupancy_results_full.csv", row.names = FALSE)
 
 # Plot species richness across sites
 richness_summary <- data.frame(
